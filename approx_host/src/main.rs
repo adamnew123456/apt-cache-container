@@ -72,6 +72,7 @@ fn garbage_collect_cache(interval: Duration, max_age: Duration, cache_root: &str
         let mut dir_counter = 0;
         let mut file_counter = 0;
         let mut del_counter = 0;
+        let mut del_bytes = 0;
         let mut to_visit = vec![PathBuf::from(cache_root)];
         while let Some(visiting) = to_visit.pop() {
             for entry in fs::read_dir(visiting).unwrap().map(|e| e.unwrap()) {
@@ -80,6 +81,7 @@ fn garbage_collect_cache(interval: Duration, max_age: Duration, cache_root: &str
                     dir_counter += 1;
                     to_visit.push(entry.path());
                 } else if ft.is_file() {
+                    let metadata = entry.metadata().unwrap();
                     file_counter += 1;
 
                     // Use the ctime rather than the mtime. The mtime is set to
@@ -87,8 +89,9 @@ fn garbage_collect_cache(interval: Duration, max_age: Duration, cache_root: &str
                     // while the ctime is set when approx touches the file:
                     //
                     // https://salsa.debian.org/ocaml-team/approx/-/blob/9e06b4e0ce4fb6a3e7d92efdb014f538412f407b/approx.ml#L76
-                    let last_modified_unix = entry.metadata().unwrap().ctime() as u64;
+                    let last_modified_unix = metadata.ctime() as u64;
                     if last_modified_unix < target_time_unix {
+                        del_bytes += metadata.len();
                         fs::remove_file(entry.path()).unwrap();
                         del_counter += 1;
                     }
@@ -97,8 +100,8 @@ fn garbage_collect_cache(interval: Duration, max_age: Duration, cache_root: &str
         }
 
         eprintln!(
-            "approx gc completed dirs={0} files={1} deleted={2}",
-            dir_counter, file_counter, del_counter
+            "approx gc completed dirs={0} files={1} del_count={2} del_bytes={3}",
+            dir_counter, file_counter, del_counter, del_bytes
         );
     }
 }
